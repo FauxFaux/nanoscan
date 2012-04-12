@@ -67,8 +67,6 @@ uint32_t generate_source_ip() {
 		exit(3);
 	}
 
-	printf("%s\n", inet_ntoa(((struct sockaddr_in *)info->ai_addr)->sin_addr));
-
 	return ((struct sockaddr_in *)info->ai_addr)->sin_addr.s_addr;
 }
 
@@ -77,6 +75,13 @@ int main() {
 	if (-1 == s) {
 		printf("can't open raw socket; are you root?\n");
 		return 4;
+	}
+
+	const int one = 1;
+	const int *val = &one;
+	if (setsockopt(s, IPPROTO_IP, IP_HDRINCL, val, sizeof (one)) < 0) {
+		printf ("Error setting IP_HDRINCL. Error number : %d . Error message : %s \n" , errno , strerror(errno));
+		exit(5);
 	}
 
 	char datagram[4096] = {};
@@ -89,6 +94,8 @@ int main() {
 	source_ip = generate_source_ip();
 
 	srand(time(NULL) ^ source_ip ^ getpid());
+
+
 	struct pseudo_header psh = {};
 
 	sin.sin_family = AF_INET;
@@ -123,26 +130,14 @@ int main() {
 	memcpy(&psh.tcp, tcph, sizeof(struct tcphdr));
 	tcph->check = csum((unsigned short*) &psh , sizeof(struct pseudo_header));
 
-	const int one = 1;
-	const int *val = &one;
-	if (setsockopt(s, IPPROTO_IP, IP_HDRINCL, val, sizeof (one)) < 0)
-	{
-		printf ("Error setting IP_HDRINCL. Error number : %d . Error message : %s \n" , errno , strerror(errno));
-		exit(0);
-	}
-
 	if (sendto(s,
 				datagram,
 				iph->tot_len,
 				0,
 				(struct sockaddr *) &sin,
-				sizeof (sin)) < 0)
-	{
-		printf ("error\n");
-	}
-	else
-	{
-		printf ("Packet Send \n");
+				sizeof (sin)) < 0) {
+		printf ("error sending\n");
+		exit(6);
 	}
 
 	return 0;
