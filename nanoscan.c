@@ -81,7 +81,7 @@ int main() {
 	const int *val = &one;
 	if (setsockopt(s, IPPROTO_IP, IP_HDRINCL, val, sizeof (one)) < 0) {
 		printf ("Error setting IP_HDRINCL. Error number : %d . Error message : %s \n" , errno , strerror(errno));
-		exit(5);
+		return 5;
 	}
 
 	char datagram[4096] = {};
@@ -137,7 +137,7 @@ int main() {
 				(struct sockaddr *) &sin,
 				sizeof (sin)) < 0) {
 		printf ("error sending\n");
-		exit(6);
+		return 6;
 	}
 
 	return 0;
