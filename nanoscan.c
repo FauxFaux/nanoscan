@@ -22,7 +22,11 @@ struct pseudo_header {
 	struct tcphdr tcp;
 };
 
-unsigned short csum(unsigned short *ptr, int nbytes) {
+static uint32_t min(uint32_t a, uint32_t b) {
+	return a < b ? a : b;
+}
+
+static unsigned short csum(unsigned short *ptr, int nbytes) {
 	long sum = 0;
 	unsigned short oddbyte;
 
@@ -43,9 +47,9 @@ unsigned short csum(unsigned short *ptr, int nbytes) {
 }
 
 const size_t SOME = 256;
-uint32_t source_ip;
+static uint32_t source_ip;
 
-uint32_t generate_source_ip() {
+static uint32_t generate_source_ip() {
 	char buf[SOME];
 	if (gethostname(buf, SOME)) {
 		printf("couldn't get local hostname\n");
@@ -98,62 +102,85 @@ int main(int argc, char *argv[]) {
 
 	srand(time(NULL) ^ source_ip ^ getpid());
 
+	const uint32_t fromi = ntohl(from.s_addr);
+	const uint32_t toi = ntohl(to.s_addr);
+	const uint32_t range = toi - fromi;
+
+	const uint32_t min_shuffle = min(512, range);
+	const uint32_t max_shuffle = min(32768, range);
+
 	uint32_t i;
-	for (i = from.s_addr; i < to.s_addr; i=htonl(ntohl(i)+1)) {
-		char datagram[4096] = {};
-		memset(datagram, 0, 4096);
-		short target_port = 443;
-		short src_port = 61322;
-		struct iphdr *iph = (struct iphdr *) datagram;
-		struct tcphdr *tcph = (struct tcphdr *) (datagram + sizeof (struct ip));
-		struct sockaddr_in sin = {};
-		source_ip = generate_source_ip();
+	const uint32_t step = rand() % (max_shuffle - min_shuffle) + min_shuffle;
+	unsigned short pos[max_shuffle];
 
-		struct pseudo_header psh = {};
+	for (i = 0; i < step; ++i)
+		pos[i] = i;
 
-		sin.sin_family = AF_INET;
-		sin.sin_port = htons(target_port);
-		sin.sin_addr.s_addr = i;
-
-		iph->ihl = 5;
-		iph->version = 4;
-		iph->tos = 0;
-		iph->tot_len = sizeof(struct ip) + sizeof(struct tcphdr);
-		iph->id = htonl(0);
-		iph->frag_off = 0;
-		iph->ttl = 255;
-		iph->protocol = IPPROTO_TCP;
-		iph->check = 0;
-		iph->saddr = source_ip;
-		iph->daddr = sin.sin_addr.s_addr;
-		iph->check = csum ((unsigned short *) datagram, iph->tot_len >> 1);
-
-		tcph->source = htons(src_port);
-		tcph->dest = htons(target_port);
-		tcph->doff = 5;
-		tcph->syn = 1;
-		tcph->window = htons(5840);
-
-		psh.source_address = source_ip;
-		psh.dest_address = sin.sin_addr.s_addr;
-		psh.placeholder = 0;
-		psh.protocol = IPPROTO_TCP;
-		psh.tcp_length = htons(20);
-
-		memcpy(&psh.tcp, tcph, sizeof(struct tcphdr));
-		tcph->check = csum((unsigned short*) &psh , sizeof(struct pseudo_header));
-
-		if (sendto(s,
-					datagram,
-					iph->tot_len,
-					0,
-					(struct sockaddr *) &sin,
-					sizeof (sin)) < 0) {
-			char buf[SOME];
-			printf ("error sending %s\n", inet_ntop(AF_INET, &i, buf, SOME));
-			return 6;
-		}
+	for (i = step - 1; i > 1; --i) {
+		size_t j = rand() % i;
+		unsigned short t = pos[j];
+		pos[j] = pos[i];
+		pos[i] = t;
 	}
+
+	uint32_t j;
+	for (j = 0; j < step; ++j)
+		for (i = fromi + pos[j]; i <= toi; i += step) {
+			char datagram[4096] = {};
+			memset(datagram, 0, 4096);
+			short target_port = 443;
+			short src_port = 61322;
+			struct iphdr *iph = (struct iphdr *) datagram;
+			struct tcphdr *tcph = (struct tcphdr *) (datagram + sizeof (struct ip));
+			struct sockaddr_in sin = {};
+			source_ip = generate_source_ip();
+
+			struct pseudo_header psh = {};
+
+			sin.sin_family = AF_INET;
+			sin.sin_port = htons(target_port);
+			sin.sin_addr.s_addr = htonl(i);
+
+			iph->ihl = 5;
+			iph->version = 4;
+			iph->tos = 0;
+			iph->tot_len = sizeof(struct ip) + sizeof(struct tcphdr);
+			iph->id = htonl(0);
+			iph->frag_off = 0;
+			iph->ttl = 255;
+			iph->protocol = IPPROTO_TCP;
+			iph->check = 0;
+			iph->saddr = source_ip;
+			iph->daddr = sin.sin_addr.s_addr;
+			iph->check = csum ((unsigned short *) datagram, iph->tot_len >> 1);
+
+			tcph->source = htons(src_port);
+			tcph->dest = htons(target_port);
+			tcph->doff = 5;
+			tcph->syn = 1;
+			tcph->window = htons(5840);
+
+			psh.source_address = source_ip;
+			psh.dest_address = sin.sin_addr.s_addr;
+			psh.placeholder = 0;
+			psh.protocol = IPPROTO_TCP;
+			psh.tcp_length = htons(20);
+
+			memcpy(&psh.tcp, tcph, sizeof(struct tcphdr));
+			tcph->check = csum((unsigned short*) &psh , sizeof(struct pseudo_header));
+
+			char buf[SOME];
+			if (sendto(s,
+						datagram,
+						iph->tot_len,
+						0,
+						(struct sockaddr *) &sin,
+						sizeof (sin)) < 0) {
+				int target = htonl(i);
+				printf ("error sending %s\n", inet_ntop(AF_INET, &target, buf, SOME));
+				return 6;
+			}
+		}
 
 	return 0;
 }
