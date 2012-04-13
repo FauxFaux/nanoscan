@@ -22,10 +22,6 @@ struct pseudo_header {
 	struct tcphdr tcp;
 };
 
-static uint32_t min(uint32_t a, uint32_t b) {
-	return a < b ? a : b;
-}
-
 static unsigned short csum(unsigned short *ptr, int nbytes) {
 	long sum = 0;
 	unsigned short oddbyte;
@@ -104,10 +100,9 @@ int main(int argc, char *argv[]) {
 
 	const uint32_t fromi = ntohl(from.s_addr);
 	const uint32_t toi = ntohl(to.s_addr);
-	const uint32_t range = toi - fromi;
 
-	const uint32_t min_shuffle = min(512, range);
-	const uint32_t max_shuffle = min(32768, range);
+	const uint32_t min_shuffle = 512;
+	const uint32_t max_shuffle = 32768;
 
 	uint32_t i;
 	const uint32_t step = rand() % (max_shuffle - min_shuffle) + min_shuffle;
