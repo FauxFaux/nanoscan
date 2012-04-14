@@ -122,7 +122,7 @@ int main(int argc, char *argv[]) {
 	const uint32_t fromi = ntohl(from.s_addr);
 	const uint32_t toi = ntohl(to.s_addr);
 
-	const uint32_t min_shuffle = 512;
+	const uint32_t min_shuffle = 2048;
 	const uint32_t max_shuffle = 32768;
 
 	uint32_t i;
@@ -188,16 +188,29 @@ int main(int argc, char *argv[]) {
 			tcph->check = csum((unsigned short*) &psh , sizeof(struct pseudo_header));
 
 			char buf[SOME];
-			if (sendto(s,
+			const int retries = 10;
+			int retry;
+			for (retry = 0; retry < retries; ++retry)
+				if (sendto(s,
 						datagram,
 						iph->tot_len,
 						0,
 						(struct sockaddr *) &sin,
-						sizeof (sin)) < 0) {
-				int target = htonl(i);
-				printf ("error sending %s\n", inet_ntop(AF_INET, &target, buf, SOME));
+						sizeof (sin)) >= 0)
+					break;
+				else {
+					int err = errno;
+					int target = htonl(i);
+					printf ("error sending to %s: 0x%x %s, backing off attempt %d\n",
+							inet_ntop(AF_INET, &target, buf, SOME), err,
+							strerror(err), retry);
+					usleep(retry * 100 * 1000);
+				}
+
+			if (retry == retries)
 				return 6;
-			}
+
+			sleep(0);
 		}
 
 	return 0;
