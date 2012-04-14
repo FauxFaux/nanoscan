@@ -70,6 +70,27 @@ static uint32_t generate_source_ip() {
 	return ((struct sockaddr_in *)info->ai_addr)->sin_addr.s_addr;
 }
 
+static uint32_t address(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
+	return d + (c << 8) + (b << 16) + (a << 24);
+}
+
+static int bad_address(uint32_t addr) {
+	return (
+		   (addr < address(1,0,0,0))
+		|| (addr >= address(10,0,0,0)     && addr <= address(10,255,255,255))
+		|| (addr >= address(127,0,0,0)    && addr <= address(127,255,255,255))
+		|| (addr >= address(169,254,0,0)  && addr <= address(169,254,255,255))
+		|| (addr >= address(172,16,0,0)   && addr <= address(172,31,255,255))
+		|| (addr >= address(192,0,2,0)    && addr <= address(192,0,2,255))
+		|| (addr >= address(192,88,99,0)  && addr <= address(192,88,99,255))
+		|| (addr >= address(192,168,0,0)  && addr <= address(192,168,255,255))
+		|| (addr >= address(198,18,0,0)   && addr <= address(198,19,255,255))
+		|| (addr >= address(198,51,100,0) && addr <= address(198,51,100,255))
+		|| (addr >= address(203,0,113,0)  && addr <= address(203,0,113,255))
+		|| (addr >= address(224,0,0,0))
+	);
+}
+
 int main(int argc, char *argv[]) {
 
 	if (argc != 3) {
@@ -121,6 +142,8 @@ int main(int argc, char *argv[]) {
 	uint32_t j;
 	for (j = 0; j < step; ++j)
 		for (i = fromi + pos[j]; i <= toi; i += step) {
+			if (bad_address(i))
+				continue;
 			char datagram[4096] = {};
 			memset(datagram, 0, 4096);
 			short target_port = 443;
