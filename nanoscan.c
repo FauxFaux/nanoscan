@@ -67,7 +67,9 @@ static uint32_t generate_source_ip() {
 		exit(3);
 	}
 
-	return ((struct sockaddr_in *)info->ai_addr)->sin_addr.s_addr;
+	const uint32_t ret = ((struct sockaddr_in *)info->ai_addr)->sin_addr.s_addr;
+	freeaddrinfo(info);
+	return ret;
 }
 
 static uint32_t address(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
@@ -139,6 +141,8 @@ int main(int argc, char *argv[]) {
 		pos[i] = t;
 	}
 
+	source_ip = generate_source_ip();
+
 	uint32_t j;
 	for (j = 0; j < step; ++j)
 		for (i = fromi + pos[j]; i <= toi; i += step) {
@@ -151,7 +155,6 @@ int main(int argc, char *argv[]) {
 			struct iphdr *iph = (struct iphdr *) datagram;
 			struct tcphdr *tcph = (struct tcphdr *) (datagram + sizeof (struct ip));
 			struct sockaddr_in sin = {};
-			source_ip = generate_source_ip();
 
 			struct pseudo_header psh = {};
 
